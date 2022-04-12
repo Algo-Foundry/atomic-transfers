@@ -1,5 +1,13 @@
 ## Atomic transfers assignment
 
+Create an atomic transfer that consists of the following transactions,
+
+1. Create an asset (NFT or fungible token)
+2. Buyer account pays 1 Algo to the creator for this asset.
+3. Creator sends 10% of the payment to the artist's account.
+
+You can assume that the buyer and artist accounts are standalone accounts.
+
 ### Setup instructions
 1. Install packages with `npm install`.
 2. Copy `.env.example` to `.env`.
