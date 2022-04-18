@@ -3,7 +3,8 @@
 Create an atomic transfer that consists of the following transactions,
 
 1. Create an asset (NFT or fungible token)
-2. Buyer account pays 1 Algo to the creator for this asset.
+2. Buyer account pays 1 Algo to the creator.
+3. Creator sends the NFT to the buyer.
 3. Creator sends 10% of the payment to the artist's account.
 
 You can assume that the buyer and artist accounts are standalone accounts.
