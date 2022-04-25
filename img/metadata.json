@@ -1,0 +1,25 @@
+{
+  "name": "ALDISMILE",
+  "description": "Aldi's Smile Artwork",
+  "image": "img/smile.png",
+  "image_integrity": "sha256-pttOEQ7x78yKhazQcQBDsbw0aN1RtJQJe5Uuc3MbV6o=",
+  "properties": {
+    "simple_property": "Aldi's smile artwork",
+    "rich_property": {
+      "name": "AldiSmileArt",
+      "value": "001",
+      "display_value": "001",
+      "class": "emphasis",
+      "css": {
+        "color": "#ffffff",
+        "font-weight": "bold",
+        "text-decoration": "underline"
+      }
+    },
+    "array_property": {
+      "name": "Artwork",
+      "value": [1, 2, 3, 4],
+      "class": "emphasis"
+    }
+  }
+}
