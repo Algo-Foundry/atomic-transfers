@@ -106,9 +106,22 @@ const getImageIntegrity = async () => {
   let NFTAssetIndex = confirmedTxn["asset-index"];
   console.log('NFT Asset ID:', NFTAssetIndex);
 
+  console.log('Buyer opt in NFT Asset.');
+  let sender = buyerAccount.addr;
+  let recipient = sender;
+  let revocationTarget = undefined;
+  let closeRemainderTo = undefined;
+  let amount = 0;
+  let note = undefined;
+
+  let opttxn = algosdk.makeAssetTransferTxnWithSuggestedParams(sender, recipient, closeRemainderTo, revocationTarget,
+      amount, note, NFTAssetIndex, params);
+
+  rawSignedTxn = opttxn.signTxn(buyerAccount.sk);
+  await submitToNetwork(rawSignedTxn);
+
   console.log('Sending NFT payment from Buyer Account to Creator Account.');
 
-  // Buyer transfer payment to buy NFT to Creator
   let transactionOptions = {
     from: buyerAccount.addr,
     to: creatorAccount.addr,
@@ -123,7 +136,6 @@ const getImageIntegrity = async () => {
 
   console.log('Sending NFT from creator account to buyer account.');
 
-  // Buyer transfer payment to buy NFT to Creator
   transactionOptions = {
     from: creatorAccount.addr,
     to: buyerAccount.addr,
@@ -139,7 +151,6 @@ const getImageIntegrity = async () => {
 
   console.log('Sending Fee from Creator Account to Artist Account.');
 
-  // Buyer transfer payment to buy NFT to Creator
   transactionOptions = {
     from: creatorAccount.addr,
     to: artistAccount.addr,
