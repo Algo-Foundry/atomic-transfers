@@ -1,160 +1,175 @@
 const algosdk = require("algosdk");
-const {mnemonicToSecretKey} = require("algosdk");
-const crypto = require('crypto');
-const fs = require('fs').promises;
 
 const algodClient = new algosdk.Algodv2(
-    process.env.ALGOD_TOKEN,
-    process.env.ALGOD_SERVER,
-    process.env.ALGOD_PORT
+  process.env.ALGOD_TOKEN,
+  process.env.ALGOD_SERVER,
+  process.env.ALGOD_PORT
 );
 
+const creator = algosdk.mnemonicToSecretKey(process.env.MNEMONIC_CREATOR);
+
 const submitToNetwork = async (signedTxn) => {
-    // send txn
-    let tx = await algodClient.sendRawTransaction(signedTxn).do();
-    console.log("Transaction : " + tx.txId);
+  // send txn
+  let tx = await algodClient.sendRawTransaction(signedTxn).do();
+  console.log("Transaction : " + tx.txId);
 
-    // Wait for transaction to be confirmed
-    confirmedTxn = await algosdk.waitForConfirmation(algodClient, tx.txId, 4);
+  // Wait for transaction to be confirmed
+  confirmedTxn = await algosdk.waitForConfirmation(algodClient, tx.txId, 4);
 
-    //Get the completed Transaction
-    console.log(
-        "Transaction " +
-        tx.txId +
-        " confirmed in round " +
-        confirmedTxn["confirmed-round"]
-    );
+  //Get the completed Transaction
+  console.log(
+    "Transaction " +
+      tx.txId +
+      " confirmed in round " +
+      confirmedTxn["confirmed-round"]
+  );
 
-    return confirmedTxn;
+  return confirmedTxn;
 };
 
-// Get image integrity to put in metadata.json.
-const getImageIntegrity = async () => {
-    const fullPathImage = __dirname + '/img/smile.png';
-    const metadatafileImage = (await fs.readFile(fullPathImage));
-    const hashImage = crypto.createHash('sha256');
-    hashImage.update(metadatafileImage);
-    const hashImageBase64 = hashImage.digest("base64");
-    const imageIntegrity = "sha256-" + hashImageBase64;
+const createAsset = async (maker) => {
+  const total = 1; // how many of this asset there will be
+  const decimals = 0; // units of this asset are whole-integer amounts
+  const assetName = "nftASA";
+  const unitName = "nft";
+  const url = "ipfs://cid";
+  const metadata = undefined;
+  const defaultFrozen = false; // whether accounts should be frozen by default
 
-    console.log("image_integrity : " + imageIntegrity);
+  // create suggested parameters
+  const suggestedParams = await algodClient.getTransactionParams().do();
 
-    return imageIntegrity;
+  // create the asset creation transaction
+  const txn = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
+    from: maker.addr,
+    total,
+    decimals,
+    assetName,
+    unitName,
+    assetURL: url,
+    assetMetadataHash: metadata,
+    defaultFrozen,
+    freeze: undefined,
+    manager: undefined,
+    clawback: undefined,
+    reserve: undefined,
+
+    suggestedParams,
+  });
+
+  // sign the transaction
+  const signedTxn = txn.signTxn(maker.sk);
+
+  return await submitToNetwork(signedTxn);
+};
+
+const sendAlgos = async (sender, receiver, amount) => {
+  // create suggested parameters
+  const suggestedParams = await algodClient.getTransactionParams().do();
+
+  let txn = algosdk.makePaymentTxnWithSuggestedParams(
+    sender.addr,
+    receiver.addr,
+    amount,
+    undefined,
+    undefined,
+    suggestedParams
+  );
+
+  // sign the transaction
+  const signedTxn = txn.signTxn(sender.sk);
+
+  const confirmedTxn = await submitToNetwork(signedTxn);
 };
 
 (async () => {
-    // Write your code here
-    const NFTprice = 1000000;
-    let params = await algodClient.getTransactionParams().do();
-    // Get image integrity to put in metadata.json.
-    await getImageIntegrity();
+  // Accounts
+  const creator = algosdk.mnemonicToSecretKey(process.env.MNEMONIC_CREATOR);
+  const buyer = algosdk.generateAccount();
+  const artist = algosdk.generateAccount();
 
-    // Creator Account
-    let creatorAccount = mnemonicToSecretKey(process.env.CREATOR_MNEMONIC);
-    console.log("Creator account address: %s", creatorAccount.addr);
+  // Fund accounts (for min balance, purchases etc)
+  await sendAlgos(creator, buyer, 1e7); // 10 Algos
+  await sendAlgos(creator, artist, 1e6); // 1 Algo
+  
+  // Create asset
+  const res = await createAsset(creator);
+  const assetId = res["asset-index"];
+  console.log(`NFT created. Asset ID is ${assetId}`);
 
-    // Artist Account
-    let artistAccount = mnemonicToSecretKey(process.env.ARTIST_MNEMONIC);
-    console.log("Artist account address: %s", artistAccount.addr);
+  const suggestedParams = await algodClient.getTransactionParams().do();
 
-    // Buyer Account
-    let buyerAccount = mnemonicToSecretKey(process.env.BUYER_MNEMONIC);
-    console.log("Buyer account address: %s", buyerAccount.addr);
+  // Txn 1: Buyer account pays 1 Algo to the creator
+  let txn1 = algosdk.makePaymentTxnWithSuggestedParams(
+    buyer.addr,
+    creator.addr,
+    1e6,
+    undefined,
+    undefined,
+    suggestedParams
+  );
 
-    console.log('Creating NFT');
-    // Setup create NFT parameters
-    const defaultFrozen = false;
-    const unitName = "ALDIART";
-    const assetName = "Aldi's Smile Artwork@arc1";
-    const url = "img/metadata.json";
-    const managerAddr = undefined;
-    const reserveAddr = undefined;
-    const freezeAddr = undefined;
-    const clawbackAddr = undefined;
-    const total = 1;                // NFTs have totalIssuance of exactly 1
-    const decimals = 0;             // NFTs have decimals of exactly 0
+  // Txn 2: Buyer opts into the asset
+  let txn2 = algosdk.makeAssetTransferTxnWithSuggestedParams(
+    buyer.addr,
+    buyer.addr,
+    undefined,
+    undefined,
+    0,
+    undefined,
+    assetId,
+    suggestedParams
+  );
 
-    // Get NFT Metadata
-    const fullPath = __dirname + '/img/metadata.json';
-    const metadatafile = (await fs.readFile(fullPath));
-    const hash = crypto.createHash('sha256');
-    hash.update(metadatafile);
+  // Txn 3: Creator sends the NFT to the buyer
+  let txn3 = algosdk.makeAssetTransferTxnWithSuggestedParams(
+    creator.addr,
+    buyer.addr,
+    undefined,
+    undefined,
+    1,
+    undefined,
+    assetId,
+    suggestedParams
+  );
 
-    const metadata = new Uint8Array(hash.digest());
+  // Txn 4: Creator sends 10% of the payment to the artist's account
+  let txn4 = algosdk.makePaymentTxnWithSuggestedParams(
+    creator.addr,
+    artist.addr,
+    Math.round(1e6 * 0.10), //prevent decimals
+    undefined,
+    undefined,
+    suggestedParams
+  );
 
-    // Create NFT Transaction
-    let txn = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
-        from: creatorAccount.addr,
-        total,
-        decimals,
-        assetName,
-        unitName,
-        assetURL: url,
-        assetMetadataHash: metadata,
-        defaultFrozen,
-        freeze: freezeAddr,
-        manager: managerAddr,
-        clawback: clawbackAddr,
-        reserve: reserveAddr,
-        suggestedParams: params,
-    });
+  // Store txns
+  let txns = [txn1, txn2, txn3, txn4];
 
-    // Sign create NFT Transaction and submit to network
-    let rawSignedTxn = txn.signTxn(creatorAccount.sk);
-    let confirmedTxn = await submitToNetwork(rawSignedTxn);
+  // Assign group ID
+  let txgroup = algosdk.assignGroupID(txns);
 
-    let NFTAssetIndex = confirmedTxn["asset-index"];
-    console.log('NFT Asset ID:', NFTAssetIndex);
+  // Sign each transaction in the group
+  const signedTxn1 = txn1.signTxn(buyer.sk); //payment
+  const signedTxn2 = txn2.signTxn(buyer.sk); //optin
+  const signedTxn3 = txn3.signTxn(creator.sk); //transfer
+  const signedTxn4 = txn4.signTxn(creator.sk); //royalty
 
-    // Setup atomic transfer
-    console.log('Creating atomic transfer.')
+  // Combine the signed transactions
+  let signed = [];
+  signed.push(signedTxn1);
+  signed.push(signedTxn2);
+  signed.push(signedTxn3);
+  signed.push(signedTxn4);
 
-    let transactionOptions = {
-        from: buyerAccount.addr,
-        to: creatorAccount.addr,
-        amount: NFTprice,
-        suggestedParams: params,
-    };
+  // Submit to network
+  try {
+    await submitToNetwork(signed);
+  } catch (error) {
+    console.error(error.response.text);
+  }
 
-    let txn1 = algosdk.makePaymentTxnWithSuggestedParamsFromObject(transactionOptions);
-
-    let sender = buyerAccount.addr;
-    let recipient = sender;
-    let revocationTarget = undefined;
-    let closeRemainderTo = undefined;
-    let amount = 0;
-    let note = undefined;
-
-    let txn2 = algosdk.makeAssetTransferTxnWithSuggestedParams(sender, recipient, closeRemainderTo, revocationTarget,
-        amount, note, NFTAssetIndex, params);
-
-    transactionOptions = {
-        from: creatorAccount.addr,
-        to: buyerAccount.addr,
-        amount: 1,
-        assetIndex: NFTAssetIndex,
-        suggestedParams: params,
-    };
-
-    let txn3 = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject(transactionOptions);
-
-    transactionOptions = {
-        from: creatorAccount.addr,
-        to: artistAccount.addr,
-        amount: NFTprice * 0.1,
-        suggestedParams: params,
-    };
-
-    let txn4 = algosdk.makePaymentTxnWithSuggestedParamsFromObject(transactionOptions);
-
-    algosdk.assignGroupID([txn1, txn2, txn3, txn4]);
-
-    // Sign individual transactions
-    let stxn1 = txn1.signTxn(buyerAccount.sk);
-    let stxn2 = txn2.signTxn(buyerAccount.sk);
-    let stxn3 = txn3.signTxn(creatorAccount.sk);
-    let stxn4 = txn4.signTxn(creatorAccount.sk);
-
-    console.log('Processing atomic transfer.');
-    await submitToNetwork([stxn1, stxn2, stxn3, stxn4]);
+  // Check your work
+  console.log("Buyer account: ", (await algodClient.accountInformation(buyer.addr).do()));
+  console.log("Artist account: ", (await algodClient.accountInformation(artist.addr).do()));
 })();
