@@ -6,8 +6,6 @@ const algodClient = new algosdk.Algodv2(
   process.env.ALGOD_PORT
 );
 
-const creator = algosdk.mnemonicToSecretKey(process.env.MNEMONIC_CREATOR);
-
 const submitToNetwork = async (signedTxn) => {
   // send txn
   let tx = await algodClient.sendRawTransaction(signedTxn).do();
@@ -63,23 +61,42 @@ const createAsset = async (maker) => {
   return await submitToNetwork(signedTxn);
 };
 
-const sendAlgos = async (sender, receiver, amount) => {
+const createPaymentTxn = async (sender, receiver, amount) => {
   // create suggested parameters
   const suggestedParams = await algodClient.getTransactionParams().do();
 
-  let txn = algosdk.makePaymentTxnWithSuggestedParams(
-    sender.addr,
-    receiver.addr,
+  const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+    from: sender.addr,
+    to: receiver.addr,
     amount,
-    undefined,
-    undefined,
     suggestedParams
-  );
+  });
+
+  return txn;
+}
+
+const createAssetTransferTxn = async (sender, receiver, assetId, amount) => {
+  // create suggested parameters
+  const suggestedParams = await algodClient.getTransactionParams().do();
+
+  const txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+    from: sender.addr,
+    to: receiver.addr,
+    assetIndex: assetId,
+    amount,
+    suggestedParams
+  });
+
+  return txn;
+}
+
+const sendAlgos = async (sender, receiver, amount) => {
+  const txn = await createPaymentTxn(sender, receiver, amount);
 
   // sign the transaction
   const signedTxn = txn.signTxn(sender.sk);
 
-  const confirmedTxn = await submitToNetwork(signedTxn);
+  await submitToNetwork(signedTxn);
 };
 
 (async () => {
@@ -97,57 +114,23 @@ const sendAlgos = async (sender, receiver, amount) => {
   const assetId = res["asset-index"];
   console.log(`NFT created. Asset ID is ${assetId}`);
 
-  const suggestedParams = await algodClient.getTransactionParams().do();
-
   // Txn 1: Buyer account pays 1 Algo to the creator
-  let txn1 = algosdk.makePaymentTxnWithSuggestedParams(
-    buyer.addr,
-    creator.addr,
-    1e6,
-    undefined,
-    undefined,
-    suggestedParams
-  );
+  const txn1 = await createPaymentTxn(buyer, creator, 1e6);
 
   // Txn 2: Buyer opts into the asset
-  let txn2 = algosdk.makeAssetTransferTxnWithSuggestedParams(
-    buyer.addr,
-    buyer.addr,
-    undefined,
-    undefined,
-    0,
-    undefined,
-    assetId,
-    suggestedParams
-  );
+  const txn2 = await createAssetTransferTxn(buyer, buyer, assetId, 0);
 
   // Txn 3: Creator sends the NFT to the buyer
-  let txn3 = algosdk.makeAssetTransferTxnWithSuggestedParams(
-    creator.addr,
-    buyer.addr,
-    undefined,
-    undefined,
-    1,
-    undefined,
-    assetId,
-    suggestedParams
-  );
+  const txn3 = await createAssetTransferTxn(creator, buyer, assetId, 1);
 
   // Txn 4: Creator sends 10% of the payment to the artist's account
-  let txn4 = algosdk.makePaymentTxnWithSuggestedParams(
-    creator.addr,
-    artist.addr,
-    Math.round(1e6 * 0.10), //prevent decimals
-    undefined,
-    undefined,
-    suggestedParams
-  );
+  const txn4 = await createPaymentTxn(creator, artist, Math.round(1e6 * 0.10));
 
   // Store txns
   let txns = [txn1, txn2, txn3, txn4];
 
   // Assign group ID
-  let txgroup = algosdk.assignGroupID(txns);
+  algosdk.assignGroupID(txns);
 
   // Sign each transaction in the group
   const signedTxn1 = txn1.signTxn(buyer.sk); //payment

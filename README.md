@@ -10,7 +10,7 @@ Create an asset (NFT or fungible token). After which, create an atomic transfer 
 You can assume that the buyer and artist accounts are standalone accounts.
 
 ### Setup instructions
-1. Install packages with `npm install`.
+1. Install packages with `yarn install`.
 2. Copy `.env.example` to `.env`.
 3. Update Algorand Sandbox credentials in `.env` file.
 4. Use variables from `.env` file by running `source .env`.
